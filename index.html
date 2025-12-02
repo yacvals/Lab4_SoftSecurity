@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login with Auth0</title>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+  <main id="main-holder">
+    <a href="#" id="logout">Logout</a>
+
+    <h1 id="login-header">Login</h1>
+
+    <div id="login-error-msg-holder">
+      <p id="login-error-msg">
+        Invalid username
+        <span id="error-msg-second-line">and/or password</span>
+      </p>
+    </div>
+
+    <form id="login-form">
+      <input
+        type="text"
+        name="login"
+        id="username-field"
+        class="login-form-field"
+        placeholder="Email"
+      />
+      <input
+        type="password"
+        name="password"
+        id="password-field"
+        class="login-form-field"
+        placeholder="Password"
+      />
+      <input
+        type="submit"
+        value="Login"
+        id="login-form-submit"
+      />
+    </form>
+
+    <h2>Register</h2>
+
+    <div id="register-error-msg-holder">
+      <p id="register-error-msg">Registration error</p>
+    </div>
+
+    <form id="register-form">
+      <input
+        type="text"
+        name="email"
+        id="register-email-field"
+        class="login-form-field"
+        placeholder="Email"
+      />
+      <input
+        type="password"
+        name="password"
+        id="register-password-field"
+        class="login-form-field"
+        placeholder="Password"
+      />
+      <input
+        type="submit"
+        value="Register"
+        id="register-form-submit"
+      />
+    </form>
+
+    <pre id="info"></pre>
+  </main>
+
+  <style>
+    html {
+      height: 100%;
+    }
+
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      display: grid;
+      justify-items: center;
+      align-items: center;
+      background-color: #3a3a3a;
+    }
+
+    #logout {
+      opacity: 0;
+    }
+
+    #main-holder {
+      width: 50%;
+      height: 70%;
+      display: grid;
+      justify-items: center;
+      align-items: center;
+      background-color: white;
+      border-radius: 7px;
+      box-shadow: 0px 0px 5px 2px black;
+    }
+
+    #login-error-msg-holder,
+    #register-error-msg-holder {
+      width: 100%;
+      display: grid;
+      justify-items: center;
+      align-items: center;
+    }
+
+    #login-error-msg,
+    #register-error-msg {
+      width: 60%;
+      text-align: center;
+      margin: 0;
+      padding: 5px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #8a0000;
+      border: 1px solid #8a0000;
+      background-color: #e58f8f;
+      opacity: 0;
+    }
+
+    #error-msg-second-line {
+      display: block;
+    }
+
+    #login-form,
+    #register-form {
+      align-self: flex-start;
+      display: grid;
+      justify-items: center;
+      align-items: center;
+    }
+
+    .login-form-field::placeholder {
+      color: #3a3a3a;
+    }
+
+    .login-form-field {
+      border: none;
+      border-bottom: 1px solid #3a3a3a;
+      margin-bottom: 10px;
+      border-radius: 3px;
+      outline: none;
+      padding: 0px 0px 5px 5px;
+    }
+
+    #login-form-submit,
+    #register-form-submit {
+      width: 100%;
+      padding: 7px;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-weight: bold;
+      background-color: #3a3a3a;
+      cursor: pointer;
+      outline: none;
+    }
+
+    #info {
+      width: 90%;
+      height: 100px;
+      overflow: auto;
+      font-size: 12px;
+      background: #f5f5f5;
+      border: 1px solid #ccc;
+    }
+  </style>
+
+  <script>
+    const logoutLink = document.getElementById('logout');
+    const loginForm = document.getElementById('login-form');
+    const loginButton = document.getElementById('login-form-submit');
+    const loginErrorMsg = document.getElementById('login-error-msg');
+
+    const registerForm = document.getElementById('register-form');
+    const registerButton = document.getElementById('register-form-submit');
+    const registerErrorMsg = document.getElementById('register-error-msg');
+
+    const infoBox = document.getElementById('info');
+    const loginHeader = document.getElementById('login-header');
+    const mainHolder = document.getElementById('main-holder');
+
+    function getSession() {
+      try {
+        return JSON.parse(sessionStorage.getItem('session') || '{}');
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveSession(session) {
+      sessionStorage.setItem('session', JSON.stringify(session));
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem('session');
+    }
+
+    function logInfo(obj) {
+      infoBox.textContent = JSON.stringify(obj, null, 2);
+    }
+
+    // Перевірка і, якщо треба, refresh токена
+    async function ensureValidToken() {
+      const session = getSession();
+      const access_token = session.access_token;
+      const refresh_token = session.refresh_token;
+      const expires_at = session.expires_at;
+
+      if (!access_token) {
+        return null;
+      }
+
+      const now = Date.now();
+      // Якщо до закінчення менше 60 секунд – оновлюємо
+      if (expires_at && expires_at - now < 60 * 1000 && refresh_token) {
+        try {
+          const resp = await axios.post('/api/refresh', {
+            refresh_token: refresh_token
+          });
+
+          const newAccessToken = resp.data.access_token;
+          const expires_in = resp.data.expires_in;
+
+          const newSession = {
+            ...session,
+            access_token: newAccessToken,
+            expires_at: Date.now() + expires_in * 1000
+          };
+
+          saveSession(newSession);
+          return newAccessToken;
+        } catch (err) {
+          console.error('Cannot refresh token', err);
+          clearSession();
+          return null;
+        }
+      }
+
+      return access_token;
+    }
+
+    async function tryLoadUser() {
+      const token = await ensureValidToken();
+
+      if (!token) {
+        return;
+      }
+
+      try {
+        const resp = await axios.get('/api/me', {
+          headers: {
+            Authorization: 'Bearer ' + token
+          }
+        });
+
+        const data = resp.data;
+
+        if (loginForm) {
+          loginForm.remove();
+        }
+
+        loginHeader.textContent = 'Hello ' + data.sub;
+        logoutLink.style.opacity = 1;
+        logInfo(data);
+      } catch (err) {
+        console.error('Error calling /api/me', err);
+        clearSession();
+      }
+    }
+
+    logoutLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      clearSession();
+      location.reload();
+    });
+
+    loginButton.addEventListener('click', async function (e) {
+      e.preventDefault();
+      loginErrorMsg.style.opacity = 0;
+
+      const login = loginForm.login.value;
+      const password = loginForm.password.value;
+
+      try {
+        const resp = await axios.post('/api/login', {
+          login: login,
+          password: password
+        });
+
+        const access_token = resp.data.access_token;
+        const refresh_token = resp.data.refresh_token;
+        const expires_in = resp.data.expires_in;
+
+        const session = {
+          access_token: access_token,
+          refresh_token: refresh_token,
+          expires_at: Date.now() + expires_in * 1000
+        };
+
+        saveSession(session);
+        await tryLoadUser();
+      } catch (err) {
+        console.error('Login error', err);
+        loginErrorMsg.style.opacity = 1;
+      }
+    });
+
+    registerButton.addEventListener('click', async function (e) {
+      e.preventDefault();
+      registerErrorMsg.style.opacity = 0;
+
+      const email = registerForm.email.value;
+      const password = registerForm.password.value;
+
+      try {
+        const resp = await axios.post('/api/register', {
+          email: email,
+          password: password
+        });
+
+        logInfo(resp.data);
+        alert('User created, now you can login');
+      } catch (err) {
+        console.error('Register error', err);
+        registerErrorMsg.style.opacity = 1;
+      }
+    });
+
+    // При завантаженні сторінки пробуємо підняти сесію
+    tryLoadUser();
+  </script>
+</body>
+
+</html>
